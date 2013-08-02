@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html>
+	<head>
+	
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+	<title></title>
+	<style>
+		#myGrid td{
+			background:url('http://localhost:80/images/blue_field.png');
+			height: 40px;
+    		width: 40px;
+			background-size:contain;
+		}
+		
+		#enemyGrid td{
+			background:url('http://localhost:80/images/red_field.png');
+			height: 40px;
+    		width: 40px;
+			background-size:contain;
+		}
+		
+		table {
+    		border: 3px solid black;
+			float:left;
+			margin-left: 50px;
+		}
+		
+		h3{
+			float:left;
+		}
+		
+	</style>
+	
+	</head>
+	<body>
+		<h3 id="gameInfo"></h3>
+	</body>
+	<script src="/socket.io/socket.io.js"></script>
+	<script>
+	
+  		var socket = io.connect('http://localhost:8001');
+		var roomHash;
+		var itsYourTurn = 0;
+		var user, enemy;
+		var myGrid, enemyGrid;
+		
+		socket.on('init-room',function(data){ // room did not exist so user must be the first gamer
+			roomHash = data.roomHash;
+			socket.emit('init-server', { roomHash: roomHash });
+		});
+		
+  		socket.on('init-user', function (data) { // room existed so user must be the second gamer
+			sendUserIncredients();
+  		});
+		
+		function sendUserIncredients(){
+			
+			var name = promptUserToEnterUsername();
+			var roomIdentifier = roomHash + '#client#'+name;
+			
+			socket.on(roomIdentifier, msgGameHandler);
+			socket.emit(roomHash+'#setup', { roomHash: roomHash, to: roomIdentifier, clientHash: roomIdentifier, username: name });
+			user = { name: name, hash: roomIdentifier};
+		}
+		
+		function promptUserToEnterUsername(){
+			var name = '';
+			while((name === null) || (name.length < 3)){
+				name = prompt('Bitte einen Namen eingeben');
+			}
+			return name;
+		}
+		
+		function promptUserToEnterRoomHash(){
+			var hash = '';
+			while((hash === null) || (hash.length < 40)){
+				hash = prompt('Bitte einen Raum-Hash eingeben');
+			}
+			return hash;
+		}
+		
+		function promptUserToEnterGameSettings(){
+			var width = '';
+			while((width === null) || ((width < 6) && (!isNaN(width))) ){
+				width = prompt('Bitte einen Spielbreite eingeben. Die Spielbreite muss mindestens 7 Felder groß sein.');
+			}
+			var height = '';
+			while((height === null) || ((height < 6) && (!isNaN(height))) ){
+				height = prompt('Bitte einen Spielhöhe eingeben. Die Spielhöhe muss mindestens 7 Felder groß sein.');
+			}
+			var shipsNumber = (width * height) / 2;
+			return { width: width, height: height, shipsNumber: shipsNumber };
+		}
+		
+		function greetUser(username, enemy, isFirst){
+			var msg = document.createElement('b');
+			msg.innerHTML = 'Hallo User ' + username;
+			if(isFirst){
+				msg.innerHTML += ', du bist der erste Spieler. ' + 
+								 'Nun kannst du mit dem Hash "' + roomHash + '" einen zweiten Spieler einladen.';
+			}
+			else{
+				msg.innerHTML += ', du bist der zweite Spieler, dein Gegner ist '+enemy.name+'. Das Spiel beginnt sobald der erste Spieler eine Zug gemacht hat.';
+			}
+			document.getElementById('gameInfo').appendChild(msg);
+		}
+		
+		function createPointBoard(myGrid, enemyGrid, width, height){
+			var board = document.createElement('div');
+			board.setAttribute('id','gameboard');
+			board.style.width = width;
+			board.style.height = height;
+			var pointSum = getSumOfPoints(enemyGrid, 10, 10);
+			board.innerHTML = '<p>Meine Punkte: <span points="0" sum="'+pointSum+'" id="myPointsListing">0/' + pointSum + '</span></p>';
+			pointSum = getSumOfPoints(myGrid, 10, 10);
+			board.innerHTML += '<p>Gegnerische Punkte: <span points="0" sum="'+pointSum+'" id="enemyPointsListing">0/' + pointSum + '</span></p>';
+			return board;
+		}
+		
+		function increaseUserPointListing(){
+			increaseListing('myPointsListing');
+		}
+		
+		function increaseEnemyPointListing(){
+			increaseListing('enemyPointsListing');
+		}
+		
+		function increaseListing(id){
+			var listing = document.getElementById(id);
+			var points = +listing.getAttribute('points') + 1;
+			listing.setAttribute('points', points);
+			listing.innerHTML = points + '/' + listing.getAttribute('sum');
+		}
+		
+		function isHit(grid, x,y){
+			return grid[y][x] !== 'x';
+		}
+		
+		function msgGameHandler(data){
+			console.log('game handler: ',data);
+			if(data.error){
+				alert('Error: '+data.error);
+			}
+			else if(data.msg === 'user#registered'){
+			
+				itsYourTurn = data.your_turn ? 1 : 0;
+				greetUser(user.name, data.enemy, itsYourTurn);
+				
+				if(itsYourTurn){ // first user has the right to determine game settings.
+					var settings = { width: 10, height: 10, shipsNumber: 7 }//promptUserToEnterGameSettings();
+					
+					myGrid = createGameArea(settings.width, settings.height, settings.shipsNumber);
+					renderGrid(myGrid, 'myGrid', settings.width, settings.height);
+					socket.emit(roomHash+'#game', { msg: 'user#gamesettings', roomHash: roomHash,
+												    settings: { width: settings.width, height: settings.height, shipsNumber: settings.shipsNumber }, grid: myGrid });
+					
+				}
+				else{
+				
+					var settings = data.enemy.settings;
+					myGrid = createGameArea(settings.width, settings.height, settings.shipsNumber);
+					renderGrid(myGrid, 'myGrid', data.enemy.settings.width, data.enemy.settings.height);
+					console.log('enemy: ',data.enemy);
+					enemyGrid = data.enemy.grid;
+					enemy = data.enemy;
+					renderGrid(enemyGrid, 'enemyGrid', data.enemy.settings.width, data.enemy.settings.height);
+					addClickHandlerToArea(enemyGrid, 'enemyGrid');
+					
+					var board = createPointBoard(myGrid, enemyGrid, '200px', '80px');
+					document.body.insertBefore(board, document.getElementById('myGrid'));
+					console.log('user: ',user);
+					socket.emit(roomHash+'#game', { msg: 'user#enemy', to: enemy.hash, enemy: { name: user.name, hash: user.hash, grid: myGrid }});
+					
+				}
+				
+			}
+			else if(data.msg === 'user#enemy'){
+			
+				enemyGrid = data.enemy.grid;
+				enemy = data.enemy;
+				renderGrid(enemyGrid, 'enemyGrid', 10, 10);
+				addClickHandlerToArea(enemyGrid, 'enemyGrid');
+				
+				var text = document.createElement('b');
+				text.innerHTML = '<p>Der zweite Spieler ist da. Sein Name lautet ' + data.enemy.name + '</p>';
+				document.body.insertBefore(text, document.getElementById('myGrid'));
+				
+				var board = createPointBoard(myGrid, enemyGrid, '200px', '80px');
+				document.body.insertBefore(board, document.getElementById('myGrid'));
+				
+			}
+			else if(data.msg === 'user#draw'){
+				var fieldSign = myGrid[data.coords.y][data.coords.x];
+				getFieldByCoords('myGrid', data.coords.x, data.coords.y).style.background = 'url(http://localhost:80/images/'+ fieldSign + '.png)';
+				
+				if(isHit(myGrid, data.coords.x, data.coords.y)){
+					increaseEnemyPointListing();
+				}
+				itsYourTurn ^= 1;
+			}
+			
+		}
+		
+		setTimeout(function(){
+			var hasHash = confirm('Hast du einen Raum-Hash?');
+			if(hasHash){
+				roomHash = promptUserToEnterRoomHash();
+				socket.emit('init-server', { roomHash: roomHash });
+			}
+			else{
+				socket.emit('init-server', { roomHash: '' });
+			}
+		}, 2000);
+		
+	</script>
+	<script type="text/javascript">
+		
+		function createGrid(width,height){
+			var grid = [];
+			for(var y=0; y < height; y++){
+				grid[y] = [];
+				for(var x=0; x< width; x++){
+					grid[y][x] = 'x';
+				}
+			}
+			return grid;
+		}
+		
+		function renderGrid(grid, id, width, height){
+			var area = '<table id='+id+'>';
+			for(var y=0; y < height; y++){
+				var row = '<tr>';
+				for(var x=0; x< width; x++){
+					row += '<td x='+x+' y='+y+'></td>';
+				}
+				row += '</tr>';
+				area += row;
+			}
+			area += '</table>';
+			document.body.innerHTML += area;
+		}
+		
+		function addClickHandlerToArea(grid, parentId){
+			
+			document.querySelector('#'+parentId).addEventListener('click',function(e){
+				if(!itsYourTurn && e.cancelable){
+					e.stopPropagation();
+				}
+			},true);
+			
+			var fields = document.querySelectorAll('#'+parentId+' td');
+			
+			for(var f=0; f < fields.length; f++){
+				
+				var posX = fields[f].getAttribute('x');
+				var posY = fields[f].getAttribute('y');
+				
+				fields[f].onclick = function(field, sign){
+					
+					field.onclick = null;
+					
+					if( isHit(grid, field.getAttribute('x'), field.getAttribute('y')) ){
+						increaseUserPointListing();
+					}
+					
+					itsYourTurn ^= 1;
+					console.log('field clicked: ',field, ' sign: ',sign);
+					field.style.background = 'url(http://localhost:80/images/'+ sign + '.png)';
+					
+					socket.emit(roomHash+'#game', { msg: 'user#draw', to: enemy.hash, coords: { x: field.getAttribute('x'), y: field.getAttribute('y') }});
+					
+				}.bind(null, fields[f], grid[posY][posX]);
+				
+			}
+		}
+		
+		function getFieldByCoords(parentId, x, y){
+			
+			var fields = document.querySelectorAll('#'+parentId+' td');
+			
+			for(var f=0; f < fields.length; f++){
+				
+				var posX = fields[f].getAttribute('x');
+				var posY = fields[f].getAttribute('y');
+				
+				if(posX === x && posY === y){
+					return fields[f];
+				}
+			}
+		}
+		
+		function getSumOfPoints(grid,width,height){
+			var sum = 0;
+			for(var y=0; y < grid.length; y++){
+				for(var x=0; x < grid[y].length; x++){
+					if(grid[y][x] !== 'x'){
+						sum++;
+					}
+				}
+			}
+			return sum;
+		}
+		
+		function isPositionFreeForShip(grid, posX, posY, dir, size){
+			
+			for(var p=0; p < size; p++){
+				if(grid[posY][posX] !== 'x'){
+					return false
+				}
+				dir === 'H' ? posX++ : posY++;
+			}
+			return true;
+			
+		}
+		
+		function getShipPosition(grid, dir, size, width, height){
+			var posX = Math.round(Math.random() * (width-size-1));
+			var posY = Math.round(Math.random() * (height-size-1));
+			if(isPositionFreeForShip(grid, posX, posY, dir, size)){
+				return { x : posX, y: posY };
+			} 
+			return getShipPosition(grid, dir, size, width, height);
+		}
+		
+		function putShipOnGrid(grid,width,height){
+		
+			var shipSize = 2 + Math.round(Math.random() * 1);
+			var shipDir = ((shipSize % 2) === 0) ? 'H' : 'V';
+			var positions = getShipPosition(grid, shipDir, shipSize, width, height);
+			var posX = positions.x;
+			var posY = positions.y;
+			
+			for(var s=0; s < shipSize; s++){
+				grid[posY][posX] = shipSize + shipDir + s;
+				
+				shipDir === 'H' ? posX++ : posY++;
+			}
+		}
+		
+		function printGrid(grid,width,height){
+		    for(var y=0; y < height; y++){
+		        var row = '';
+				for(var x=0; x< width; x++){
+					row += ' '+grid[y][x]+' ';
+				}
+				console.log(row);
+				console.log('\n');
+			}
+		}
+		
+		function createGameArea(width, height, shipNumber){
+			
+			width = (width >= 10) ? width : 10;
+			height = (height >= 10) ? height : 10;
+			shipNumber = (shipNumber >= 5) ? shipNumber : 5;
+			
+			var grid = createGrid(width, height);
+			for(var ship=0; ship < shipNumber; ship++){
+				putShipOnGrid(grid, width, height);
+			}
+			return grid;
+		}
+		
+	</script>
+</html>
