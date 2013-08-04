@@ -209,6 +209,7 @@
 				if(isHit(myGrid, data.coords.x, data.coords.y)){
 					increaseEnemyPointListing();
 					if(hasEnemyWon()){
+						socket.close();
 						alert(enemy.name + ' hat gewonnen');
 						alert('Die Seite wir neu geladen, danke für spielen');
 						window.location.href = window.location.href;
