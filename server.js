@@ -27,7 +27,7 @@ var rooms = [];
 // 3. Client is prompted to enter their name and sends roomHash, clientHash and username to the server
 
 io.sockets.on('connection', function (socket) {
-
+	
   socket.on('init-server', initHandler.bind(socket));
   
 });
@@ -41,7 +41,6 @@ function initHandler(data){
 		rooms.push(newRoom);
 		
     	this.emit('init-room', { roomHash: roomHash });
-	
 	}
 	else{
 		delete this._events['init-server']; // remove initHandler from socket
@@ -67,6 +66,7 @@ function msgSetupHandler(data){
 		
 			this.emit(data.to, { msg: 'user#registered', enemy: enemy, your_turn: isFirstUser(data.roomHash) });
 			
+			this.on('disconnect', disconnectionHandler.bind(this, data.roomHash, data.clientHash));
 		}
 		else{
 			this.emit(data.to, { error: 'room#full' });
@@ -96,6 +96,25 @@ function msgGameHandler(data){
 	
 }
 
+function disconnectionHandler(roomHash, userHash){
+	
+	var users = getUsersFromRoom(roomHash).users;
+	
+	if(users.length > 1){
+		var tmpUsers = users.filter(function(user, index, array){
+    		if(user.hash !== userHash){
+        		return user;
+			}
+		});
+		
+		this.broadcast.emit(tmpUsers[0].hash, { msg: 'user#leave' });
+		
+		getUsersFromRoom(roomHash).users = tmpUsers;
+	}
+	else{
+		destroyRoom(roomHash);
+	}
+}
 
 // helper
 
@@ -104,6 +123,14 @@ function createRoom(){
 		hash: createHash(),
 		users:[]
 	};
+}
+
+function destroyRoom(roomHash){
+	rooms = rooms.filter(function(room, index, array){
+		if(room.hash !== roomHash){
+			return room;
+		}
+	});
 }
 
 var createHash = function(){
