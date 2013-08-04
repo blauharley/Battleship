@@ -34,6 +34,13 @@
 	</head>
 	<body>
 		<h3 id="gameInfo"></h3>
+		
+		<div id="msgPanel" style="display:none; position:absolute; left: 0px; height:300px; width:100%">
+			<div style="width:400px; height:300px; margin:0 auto; position:relative; z-index:100; background-color:#90C1DD; opacity: .8; text-align:center;"> 
+				<b style="line-height:300px; vertical-align:middle; transition: font-size 4s ease;">Dein Zug!</b>
+			</div>
+		</div>
+		
 	</body>
 	<script src="/socket.io/socket.io.js"></script>
 	<script>
@@ -103,6 +110,20 @@
 				msg.innerHTML += ', du bist der zweite Spieler, dein Gegner ist '+enemy.name+'. Das Spiel beginnt sobald der erste Spieler eine Zug gemacht hat.';
 			}
 			document.getElementById('gameInfo').appendChild(msg);
+		}
+		
+		function showMessagePanel(){
+		
+			var panel = document.querySelector('#msgPanel');
+			panel.style.display = 'inline';
+			
+			var textNode = document.querySelector('#msgPanel div b');
+			textNode.style.fontSize = '70px';	
+			
+			setTimeout(function(){
+				panel.style.display = 'none';
+				textNode.style.fontSize = '0px';
+			},4000);
 		}
 		
 		function createPointBoard(myGrid, enemyGrid, width, height){
@@ -201,6 +222,7 @@
 				var board = createPointBoard(myGrid, enemyGrid, '200px', '80px');
 				document.body.insertBefore(board, document.getElementById('myGrid'));
 				
+				showMessagePanel();
 			}
 			else if(data.msg === 'user#draw'){
 				var fieldSign = myGrid[data.coords.y][data.coords.x];
@@ -216,6 +238,7 @@
 					}
 				}
 				itsYourTurn ^= 1;
+				showMessagePanel();
 			}
 			else if(data.msg === 'user#leave'){
 			
