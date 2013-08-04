@@ -50,6 +50,7 @@
 		var itsYourTurn = 0;
 		var user, enemy;
 		var myGrid, enemyGrid;
+		var settings;
 		
 		socket.on('init-room',function(data){ // room did not exist so user must be the first gamer
 			roomHash = data.roomHash;
@@ -65,8 +66,19 @@
 			var name = promptUserToEnterUsername();
 			var roomIdentifier = roomHash + '#client#'+name;
 			
+			settings = { width: 10, height: 10, shipsNumber: 7 }//promptUserToEnterGameSettings();
+			myGrid = createGameArea(settings.width, settings.height, settings.shipsNumber);
+			
 			socket.on(roomIdentifier, msgGameHandler);
-			socket.emit(roomHash+'#setup', { roomHash: roomHash, to: roomIdentifier, clientHash: roomIdentifier, username: name });
+			socket.emit(roomHash+'#setup', { 
+											roomHash: roomHash, 
+											to: roomIdentifier, 
+											clientHash: roomIdentifier, 
+											username: name, 
+											settings: { width: settings.width, height: settings.height, shipsNumber: settings.shipsNumber }, 
+											grid: myGrid
+											});
+											
 			user = { name: name, hash: roomIdentifier};
 		}
 		
@@ -181,17 +193,12 @@
 				greetUser(user.name, data.enemy, itsYourTurn);
 				
 				if(itsYourTurn){ // first user has the right to determine game settings.
-					var settings = { width: 10, height: 10, shipsNumber: 7 }//promptUserToEnterGameSettings();
-					
-					myGrid = createGameArea(settings.width, settings.height, settings.shipsNumber);
+					settings = { width: 10, height: 10, shipsNumber: 7 }//promptUserToEnterGameSettings();
 					renderGrid(myGrid, 'myGrid', settings.width, settings.height);
-					socket.emit(roomHash+'#game', { msg: 'user#gamesettings', roomHash: roomHash,
-												    settings: { width: settings.width, height: settings.height, shipsNumber: settings.shipsNumber }, grid: myGrid });
-					
 				}
 				else{
 				
-					var settings = data.enemy.settings;
+					settings = data.enemy.settings;
 					myGrid = createGameArea(settings.width, settings.height, settings.shipsNumber);
 					renderGrid(myGrid, 'myGrid', data.enemy.settings.width, data.enemy.settings.height);
 					console.log('enemy: ',data.enemy);
@@ -243,7 +250,10 @@
 			else if(data.msg === 'user#leave'){
 			
 				document.querySelector('#enemyGrid').outerHTML = '';
+				document.querySelector('#gameboard').outerHTML = '';
+				
 				alert(enemy.name + ' hat den Raum verlassen');
+				rerenderGrid(myGrid, 'myGrid', settings.width, settings.height);
 				
 			}
 			
@@ -286,6 +296,11 @@
 			}
 			area += '</table>';
 			document.body.innerHTML += area;
+		}
+		
+		function rerenderGrid(grid, id, width, height){
+			document.querySelector('#'+id).outerHTML = '';
+			renderGrid(grid, id, width, height);
 		}
 		
 		function addClickHandlerToArea(grid, parentId){

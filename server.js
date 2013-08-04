@@ -60,7 +60,7 @@ function msgSetupHandler(data){
 			
 			var enemy = users[0];
 			
-			insertNewUserIntoRoom(data.roomHash, { hash: data.clientHash, name: data.username});
+			insertNewUserIntoRoom(data.roomHash, { hash: data.clientHash, name: data.username, settings: data.settings, grid: data.grid});
 		
 			this.on(data.roomHash+'#game', msgGameHandler.bind(this));
 		
@@ -81,12 +81,6 @@ function msgGameHandler(data){
 		
 		case 'user#draw':
 			this.broadcast.emit(data.to, { msg: data.msg, coords: data.coords});
-			break;
-		
-		case 'user#gamesettings':
-			var firstUser = getUsersFromRoom(data.roomHash).users[0];
-			firstUser.settings = data.settings;
-			firstUser.grid = data.grid;
 			break;
 		
 		case 'user#enemy':
